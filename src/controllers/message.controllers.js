@@ -1,4 +1,4 @@
-import { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 import { User } from "../models/user.model.js";
 import { Message } from "../models/message.model.js";
 import { MessageRecipient } from "../models/message_recipient.model.js";
@@ -124,20 +124,20 @@ export const createMessageRecipient = async (data) => {
 export const getChatHistory = asyncHandler(async (req, res) => {
   const userId = req.params.id;
   const { friendList } = req.body;
-
   const isValidUserId = isValidObjectId(userId);
 
   if (!isValidUserId) {
     return res.status(400).json(new ApiResponse(400, "UserId is not valid"));
   }
 
+  const mongooseUserId = new mongoose.Types.ObjectId(userId);
   const userDetail = await User.findById(userId);
 
   if (!userDetail) {
     return res.status(404).json(new ApiResponse(404, "User Details not found"));
   }
 
-  let chatHistoryResult = [];
+  let chatHistoryResult = {};
 
   const r = await MessageRecipient.aggregate([
     {
@@ -154,11 +154,39 @@ export const getChatHistory = asyncHandler(async (req, res) => {
     {
       $match: {
         $or: [
-          { recipientId: userId }, // Match the recipientId
-          { "messageInfo.messageCreatorId": messageCreatorId }, // Match messageCreatorId inside messageInfo
+          { recipientId: mongooseUserId }, // Match the recipientId
+          { "messageInfo.createdBy": mongooseUserId }, // Match messageCreatorId inside messageInfo
         ],
       },
     },
+    {
+      $sort:{
+        "messageInfo.time":1
+      }
+    }
   ]);
-  res.status(200).json(new ApiResponse(200, "Chat fetched successfully", r));
+
+  r.forEach((data) => {
+    let friendUserId = data?.messageInfo?.createdBy;
+    console.log(data?.messageInfo?.createdBy.toString(),userId,data?.messageInfo?.createdBy.toString() === userId);
+    
+    if (data?.messageInfo?.createdBy.toString() === userId)
+      friendUserId = data?.recipientId;
+    console.log(friendUserId);
+    
+    const singleChatMessage = {
+      content: data?.messageInfo?.content,
+      senderId: data?.messageInfo?.createdBy,
+      parentMessageId: data?.messageInfo?.parentMessageId,
+      receiverId: data?.recipientId,
+      time: data?.messageInfo?.time,
+    };
+    const previousChatInfo = chatHistoryResult?.[friendUserId] || [];
+    const chatInfo = [...previousChatInfo, singleChatMessage];
+    chatHistoryResult[friendUserId] = chatInfo;
+  });
+
+  console.log(chatHistoryResult);
+
+  res.status(200).json(new ApiResponse(200, "Chat fetched successfully", chatHistoryResult));
 });

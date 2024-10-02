@@ -18,14 +18,14 @@ const router = Router();
 
 router.route("/create").post(createUser);
 
-router.route("/").post(loginUser).patch(updateUser).delete(deleteUser);
+router.route("/").post(loginUser).delete(deleteUser);
 
 router.route("/search").get(searchUser);
 router
-  .route("/avatar")
-  .post(verifyUser, upload.single("avatar_file"), updateAvatarUser);
+  .route("/avatar/:id")
+  .post(upload.single("avatar_file"), updateAvatarUser);
 
-router.route("/:id").get(getUser);
+router.route("/:id").get(getUser).patch(updateUser);
 
 router.route("/friend-list/:id").get(getFriendList).post(addUserFriend);
 

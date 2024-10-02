@@ -135,16 +135,51 @@ export const getUser = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, "User fetch Successfully", userDetail));
 });
-export const updateUser = asyncHandler(async (req, res) => {});
+
+/*
+->First we see the id is valid or not
+->Then we that user is exist or not with given valid id
+->then we updated the userInfo
+*/
+export const updateUser = asyncHandler(async (req, res) => {
+  const { data } = req.body;
+  const { id } = req.params;
+  console.log(data);
+  
+  const isValidUserId = isValidObjectId(id);
+
+  if (!isValidUserId) {
+    return res.status(400).json(new ApiResponse(400, "UserId is not valid"));
+  }
+
+  const userDetail = await User.findById(id);
+  if (!userDetail) {
+    return res.status(404).json(new ApiResponse(404, "User not found"));
+  }
+
+  const updatedUserInfo = await User.findByIdAndUpdate(
+    id,
+    {
+      ...data,
+    },
+    { new: true }
+  ).select("-password -friendList");
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, "User data updated Successfully", updatedUserInfo)
+    );
+});
 
 export const updateAvatarUser = asyncHandler(async (req, res) => {
   const AvatarInfo = req?.file;
   const userInfo = req.user;
-
+  const { id } = req.params;
   if (!AvatarInfo?.path) {
     return res.status(404).json(new ApiResponse(404, "File not found"));
   }
-  const userDetail = await User.findById(userInfo?.id);
+  const userDetail = await User.findById(id);
 
   if (!userDetail) {
     return res.status(404).json(new ApiResponse(404, "User not found"));
@@ -216,22 +251,25 @@ export const getFriendList = asyncHandler(async (req, res) => {
   const friendsList = userDetail?.friendList || [];
 
   const result = [];
-  
+
   const response = friendsList?.map(async (data) => {
-    const friendInfo = await User.findById(data?.id).select("-password -accessToken");
-    result.push(friendInfo);
+    const friendInfo = await User.findById(data?.id).select(
+      "-password -accessToken -friendList"
+    );
+    result.push({ ...friendInfo._doc, unseenMessage: 0 });
     return result;
   });
   await Promise.all(response);
 
   res
     .status(200)
-    .json(new ApiResponse(200, "Friend List fetched Successfully",result));
+    .json(new ApiResponse(200, "Friend List fetched Successfully", result));
 });
 
 export const addUserFriend = asyncHandler(async (req, res) => {
   const { friendId } = req.body;
   const userId = req.params.id;
+  console.log(userId, friendId);
 
   const isValidUserId = isValidObjectId(userId);
   const isValidFriendId = isValidObjectId(friendId);
@@ -256,10 +294,12 @@ export const addUserFriend = asyncHandler(async (req, res) => {
   }
 
   const intialList = userDetail?.friendList || [];
+  const intialList2 = friendDetail?.friendList || [];
 
   userDetail.friendList = [{ id: friendId, type: "Single" }, ...intialList];
-
+  friendDetail.friendList = [{ id: userId, type: "Single" }, ...intialList2];
   await userDetail.save();
+  await friendDetail.save();
 
   const updatedUserInfo = await User.findById(userDetail?._id).select(
     "-password -accessToken"
